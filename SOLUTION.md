@@ -18,6 +18,24 @@
 
 ---
 
+## Verified Findings From the Live Database
+
+The raw PostgreSQL data confirms the actual March revenue split:
+
+- Sunset Properties (`tenant-a`) total March revenue: `12076.00`
+- Ocean Rentals (`tenant-b`) total March revenue: `5032.50`
+- `prop-005` / `Urban Loft Modern` under tenant-b: `3256.00`
+
+This means the `USD 3,256.00` value showing in the dashboard is not Sunset data. It is the Ocean Rentals property, which is why the totals looked cross-tenant and misleading.
+
+The root cause is a combination of:
+
+1. The revenue cache key only used `property_id` instead of including the tenant, so the same property cache could be shared across tenants.
+2. The reservation service included a hardcoded mock fallback that returned fabricated totals such as `3256.00` for `prop-005`.
+3. The frontend dashboard allowed property selection without strict backend tenant scoping, which exposed cross-company property data.
+
+---
+
 ## Bug 1 — Hardcoded Property List (Cross-Tenant Data Exposure)
 
 **Files:** `frontend/src/components/Dashboard.tsx` · `backend/app/api/v1/dashboard.py`
