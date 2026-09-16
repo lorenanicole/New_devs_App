@@ -68,7 +68,7 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="space-y-6">
-            <RevenueSummary propertyId={selectedProperty} />
+            {selectedProperty && <RevenueSummary propertyId={selectedProperty} />}
           </div>
         </div>
       </div>
