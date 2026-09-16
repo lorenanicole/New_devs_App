@@ -302,6 +302,7 @@ docker compose up --build
 
 - Frontend: http://localhost:3000
 - Backend API docs: http://localhost:8000/docs
+- Loom Video: https://www.loom.com/share/265aebfbc0464c9c95759688558ebcce
 
 ---
 
