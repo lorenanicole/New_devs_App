@@ -1,5 +1,14 @@
 # Solution
 
+## Assumptions & Notes
+
+- **No system rebuild** — all changes are targeted bug fixes to existing files. No architecture changes, no framework swaps, no new dependencies added to production code. The existing codebase structure and patterns were followed throughout.
+- **New file: `backend/app/services/properties.py`** — this was added not to rebuild the system, but because the DB query logic for properties had no correct home. The `services/` layer already existed for this purpose (`reservations.py`, `cache.py`). Moving the DB query there follows the existing pattern rather than leaving it as inline logic inside a route handler.
+- **Tests** — the assignment asked to "test your fixes with the provided client credentials" (i.e. manual testing via the UI). A basic pytest suite was added as a bonus to formally document the regression cases for each bug. These are not required by the assignment and go slightly beyond scope, but demonstrate the expected behaviour explicitly and serve as a safeguard against regressions.
+- **Schema fixes** — `database/schema.sql` changes (`NOT NULL`, `NUMERIC(19,4)`, RLS policies) are schema corrections, not a rebuild. These would require a DB migration in a live environment, which is noted but not implemented here as it was out of scope for this exercise.
+
+---
+
 ## Client Issues
 1. Client A (Sunset Properties): "The revenue numbers on your dashboard don't match our internal records. We're showing different totals for March, and we're worried about accuracy for our board meeting next week."
 
