@@ -276,8 +276,111 @@ CREATE POLICY tenant_isolation_reservations ON reservations
 
 ## Demo
 
-1. Visit the frontend at http://localhost:3000/login
-2. Log in as **Client A** (`sunset@propertyflow.com` / `client_a_2024`) — dropdown shows only `prop-001`, `prop-002`, `prop-003`
-3. Log in as **Client B** (`ocean@propertyflow.com` / `client_b_2024`) — dropdown shows only `prop-004`, `prop-005`
-4. Verify no cross-tenant data is accessible from either account
+### Start the app
+
+```bash
+docker compose up --build
+```
+
+- Frontend: http://localhost:3000
+- Backend API docs: http://localhost:8000/docs
+
+---
+
+### Bug 1 — Verify property dropdown is tenant-scoped
+
+1. Visit http://localhost:3000/login
+2. Log in as **Client A** (`sunset@propertyflow.com` / `client_a_2024`)
+3. The "Select Property" dropdown should show **only**:
+   - Beach House Alpha (`prop-001`)
+   - City Apartment Downtown (`prop-002`)
+   - Country Villa Estate (`prop-003`)
+4. `prop-004` (Lakeside Cottage) and `prop-005` (Urban Loft Modern) must **not** appear — those belong to Client B
+5. Log out, log in as **Client B** (`ocean@propertyflow.com` / `client_b_2024`)
+6. The dropdown should show **only**:
+   - Lakeside Cottage (`prop-004`)
+   - Urban Loft Modern (`prop-005`)
+
+You can also verify via the API directly:
+
+```bash
+# Get a token for Client A
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"sunset@propertyflow.com","password":"client_a_2024"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+# Client A's properties — should return 3 (tenant-a only)
+curl -s http://localhost:8000/api/v1/dashboard/properties \
+  -H "Authorization: Bearer $TOKEN"
+
+# Client A tries to access prop-005 (Client B's) — should return 403
+curl -s "http://localhost:8000/api/v1/dashboard/summary?property_id=prop-005" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Expected responses:
+```json
+// /dashboard/properties
+[
+  {"id": "prop-001", "name": "Beach House Alpha",       "tenant_id": "tenant-a"},
+  {"id": "prop-002", "name": "City Apartment Downtown", "tenant_id": "tenant-a"},
+  {"id": "prop-003", "name": "Country Villa Estate",    "tenant_id": "tenant-a"}
+]
+
+// /dashboard/summary?property_id=prop-005
+{"detail": "Property 'prop-005' does not belong to your account."}
+```
+
+---
+
+### Bug 2 — Verify cache is tenant-scoped
+
+Both tenants share `prop-001` as a property ID (it exists in the DB for both). Before the fix, whichever tenant's data was cached first would be returned to the other on refresh.
+
+```bash
+# Client A token (from above)
+TOKEN_A=$TOKEN
+
+# Client B token
+TOKEN_B=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"ocean@propertyflow.com","password":"client_b_2024"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+# Client A requests prop-001 — caches under revenue:tenant-a:prop-001
+curl -s "http://localhost:8000/api/v1/dashboard/summary?property_id=prop-001" \
+  -H "Authorization: Bearer $TOKEN_A"
+
+# Client B requests prop-001 — hits a separate key revenue:tenant-b:prop-001
+# Before the fix this would return Client A's cached data
+curl -s "http://localhost:8000/api/v1/dashboard/summary?property_id=prop-001" \
+  -H "Authorization: Bearer $TOKEN_B"
+```
+
+Client B will get a 403 (prop-001 is not in their tenant's property list) — confirming the isolation works at both the ownership check and the cache layer.
+
+---
+
+### Run the automated tests
+
+```bash
+cd backend
+
+# Install dev dependencies (requires uv)
+uv sync --group dev
+
+# Run the bug regression tests
+uv run pytest tests/test_bugs.py -v
+```
+
+Expected output:
+```
+tests/test_bugs.py::test_properties_are_scoped_to_tenant       PASSED
+tests/test_bugs.py::test_summary_blocked_for_foreign_property  PASSED
+tests/test_bugs.py::test_cache_key_is_tenant_scoped            PASSED
+tests/test_bugs.py::test_properties_service_filters_by_tenant  PASSED
+
+4 passed in Xs
+```
 
